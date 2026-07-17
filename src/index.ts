@@ -16,6 +16,41 @@ const KLING_SECRET_KEY = process.env.KLING_SECRET_KEY;
 const KLING_DOWNLOAD_PATH = process.env.KLING_DOWNLOAD_PATH; // Optional custom download path
 const KLING_AUTO_DOWNLOAD = process.env.KLING_AUTO_DOWNLOAD !== 'false'; // Default true
 
+const CREDIT_CONSUMING_URL_KEYS = new Set([
+  'image_url', 'image_tail_url', 'video_url', 'audio_url',
+  'ref_image_url', 'person_image_url', 'image_urls', 'cloth_image_urls',
+]);
+
+function safeConfirmationSummary(args: Record<string, any>): string {
+  const lines: string[] = [];
+  for (const [key, value] of Object.entries(args)) {
+    if (key === 'confirm') continue;
+    if (CREDIT_CONSUMING_URL_KEYS.has(key)) {
+      const count = Array.isArray(value) ? value.length : (value ? 1 : 0);
+      lines.push(`- ${key}: ${count > 0 ? `provided (${count})` : 'not provided'}`);
+      continue;
+    }
+    if (typeof value === 'string') {
+      const truncated = value.length > 120 ? value.slice(0, 120) + '…' : value;
+      lines.push(`- ${key}: ${truncated}`);
+    } else {
+      lines.push(`- ${key}: ${JSON.stringify(value)}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+function confirmationRequiredResponse(args: Record<string, any>) {
+  return {
+    content: [
+      {
+        type: 'text' as const,
+        text: `Esta acción consume créditos de Kling. Reenvía la solicitud con confirm=true para ejecutarla.\n\nResumen de parámetros:\n${safeConfirmationSummary(args)}`,
+      },
+    ],
+  };
+}
+
 async function generateJWT(accessKey: string, secretKey: string): Promise<string> {
   const { SignJWT } = await import('jose');
   const secret = new TextEncoder().encode(secretKey);
@@ -156,6 +191,10 @@ const TOOLS: Tool[] = [
             },
           },
         },
+        confirm: {
+          type: 'boolean',
+          description: 'Must be true to actually execute this credit-consuming action. Call once without it to preview, then again with confirm=true.',
+        },
       },
       required: ['prompt'],
     },
@@ -202,6 +241,10 @@ const TOOLS: Tool[] = [
           description: 'Creative freedom scale 0-1 (default: 0.5)',
           minimum: 0,
           maximum: 1,
+        },
+        confirm: {
+          type: 'boolean',
+          description: 'Must be true to actually execute this credit-consuming action. Call once without it to preview, then again with confirm=true.',
         },
       },
       required: ['image_url', 'prompt'],
@@ -250,6 +293,10 @@ const TOOLS: Tool[] = [
           enum: ['standard', 'professional'],
           description: 'Video generation mode (default: standard)',
         },
+        confirm: {
+          type: 'boolean',
+          description: 'Must be true to actually execute this credit-consuming action. Call once without it to preview, then again with confirm=true.',
+        },
       },
       required: ['task_id', 'prompt'],
     },
@@ -288,6 +335,10 @@ const TOOLS: Tool[] = [
           enum: ['kling-v1', 'kling-v1.5', 'kling-v1.6', 'kling-v2-master'],
           description: 'Model version to use (default: kling-v2-master)',
         },
+        confirm: {
+          type: 'boolean',
+          description: 'Must be true to actually execute this credit-consuming action. Call once without it to preview, then again with confirm=true.',
+        },
       },
       required: ['video_url'],
     },
@@ -319,6 +370,10 @@ const TOOLS: Tool[] = [
           type: 'string',
           enum: ['kling-v1', 'kling-v1.5', 'kling-v1.6', 'kling-v2-master'],
           description: 'Model version to use (default: kling-v2-master)',
+        },
+        confirm: {
+          type: 'boolean',
+          description: 'Must be true to actually execute this credit-consuming action. Call once without it to preview, then again with confirm=true.',
         },
       },
       required: ['image_urls', 'effect_scene'],
@@ -364,6 +419,10 @@ const TOOLS: Tool[] = [
           minimum: 0,
           maximum: 1,
         },
+        confirm: {
+          type: 'boolean',
+          description: 'Must be true to actually execute this credit-consuming action. Call once without it to preview, then again with confirm=true.',
+        },
       },
       required: ['prompt'],
     },
@@ -405,6 +464,10 @@ const TOOLS: Tool[] = [
           type: 'string',
           enum: ['kolors-virtual-try-on-v1', 'kolors-virtual-try-on-v1.5'],
           description: 'Model version to use (default: kolors-virtual-try-on-v1.5)',
+        },
+        confirm: {
+          type: 'boolean',
+          description: 'Must be true to actually execute this credit-consuming action. Call once without it to preview, then again with confirm=true.',
         },
       },
       required: ['person_image_url', 'cloth_image_urls'],
@@ -478,6 +541,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case 'generate_video': {
+        if (args.confirm !== true) {
+          return confirmationRequiredResponse(args);
+        }
         const videoRequest: VideoGenerationRequest = {
           prompt: args.prompt as string,
           negative_prompt: args.negative_prompt as string | undefined,
@@ -502,6 +568,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'generate_image_to_video': {
+        if (args.confirm !== true) {
+          return confirmationRequiredResponse(args);
+        }
         const videoRequest: VideoGenerationRequest = {
           prompt: args.prompt as string,
           negative_prompt: args.negative_prompt as string | undefined,
@@ -556,6 +625,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'extend_video': {
+        if (args.confirm !== true) {
+          return confirmationRequiredResponse(args);
+        }
         const extendRequest = {
           task_id: args.task_id as string,
           prompt: args.prompt as string,
@@ -577,6 +649,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'create_lipsync': {
+        if (args.confirm !== true) {
+          return confirmationRequiredResponse(args);
+        }
         const lipsyncRequest = {
           video_url: args.video_url as string,
           audio_url: args.audio_url as string | undefined,
@@ -604,6 +679,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'apply_video_effect': {
+        if (args.confirm !== true) {
+          return confirmationRequiredResponse(args);
+        }
         const effectRequest: VideoEffectsRequest = {
           image_urls: args.image_urls as string[],
           effect_scene: args.effect_scene as 'hug' | 'kiss' | 'heart_gesture' | 'squish' | 'expansion' | 'fuzzyfuzzy' | 'bloombloom' | 'dizzydizzy',
@@ -624,6 +702,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'generate_image': {
+        if (args.confirm !== true) {
+          return confirmationRequiredResponse(args);
+        }
         const imageRequest: ImageGenerationRequest = {
           prompt: args.prompt as string,
           negative_prompt: args.negative_prompt as string | undefined,
@@ -678,6 +759,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'virtual_try_on': {
+        if (args.confirm !== true) {
+          return confirmationRequiredResponse(args);
+        }
         const tryOnRequest: VirtualTryOnRequest = {
           person_image_url: args.person_image_url as string,
           cloth_image_urls: args.cloth_image_urls as string[],

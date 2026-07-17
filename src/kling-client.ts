@@ -154,17 +154,13 @@ export default class KlingClient {
   
   private async processImageUrl(url: string | undefined): Promise<string | undefined> {
     if (!url) return undefined;
-    
-    if (url.startsWith('file://') || !url.startsWith('http')) {
-      try {
-        const uploadedUrl = await uploadFromUrl(url);
-        console.log(`Uploaded file to: ${uploadedUrl}`);
-        return uploadedUrl;
-      } catch (uploadError) {
-        throw new Error(`Failed to upload file: ${uploadError instanceof Error ? uploadError.message : String(uploadError)}`);
-      }
+
+    if (!url.startsWith('https://')) {
+      throw new Error(
+        'SAFE MODE: only pre-approved public HTTPS URLs are allowed. Local files, file:// and http:// are disabled.'
+      );
     }
-    
+
     return url;
   }
 
